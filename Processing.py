@@ -101,6 +101,94 @@ def crop_to_narrowest_y_range(image):
     cropped = image[best_y_min:best_y_max+1, :, :]
     return cropped
 
+def remove_resistor_body(image):
+    """
+    This function removes the resistor body colour by sampling the 4 corners of the image and 
+    takes the average of the 4 as the resistor body colour. It then subtracts the whole image
+    by this average colour and applies a thresholding to set all pixels to 0 or 1 with the resistor
+    body colour set to 0 and the rest of the image to 1. 
+    """
+    # Get the average color of the 4 corners
+    h, w = image.shape[:2]
+    top_left = image[0, 0]
+    top_right = image[0, w - 1]
+    bottom_left = image[h - 1, 0]
+    bottom_right = image[h - 1, w - 1]
+
+    avg_color = np.mean([top_left, top_right, bottom_left, bottom_right], axis=0)
+
+    print("Average color:", avg_color)
+
+    # Subtract the average color from the image using numpy broadcasting
+    subtracted_image = np.absolute(image.astype(np.float32) - avg_color.astype(np.float32))
+    subtracted_image = subtracted_image.astype(np.uint8)
+
+    # Convert to grayscale for thresholding
+    #gray = cv2.cvtColor(subtracted_image, cv2.COLOR_RGB2GRAY)
+    #_, binary_image = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    return subtracted_image.astype(np.uint8)
+
+
+
+def lococate_colour_bands(binary_image):
+    '''
+    Extract the colour bands location from the binary image.
+    
+    '''
+
+def image_histogram_equalization(image):
+    """
+    Convert the image to  color space and apply histogram equalization to the  channel.
+    Then convert back to RGB color space.
+    """
+    hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+    h_channel, s_channel, v_channel = cv2.split(hsv)
+
+    # Apply histogram equalization to the L channel
+    #h_channel_eq = cv2.equalizeHist(h_channel)
+
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    h_channel_eq = clahe.apply(h_channel)
+
+    # Merge the channels back
+    hsv_eq = cv2.merge((h_channel_eq, s_channel, v_channel))
+
+    # Convert back to RGB color space
+    rgb_eq = cv2.cvtColor(hsv_eq, cv2.COLOR_HSV2RGB)
+
+    return (hsv_eq, rgb_eq)
+
+def remove_glare(image):
+
+    #COLOR 
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=40.0,tileGridSize=(8,8))
+    l_eq = clahe.apply(l)
+    lab = cv2.merge((l_eq, a, b))
+    clahe_bgr = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+
+    #INPAINT + CLAHE
+    gray = cv2.cvtColor(clahe_bgr, cv2.COLOR_BGR2GRAY)
+    mask = cv2.threshold(gray , 210, 255, cv2.THRESH_BINARY)[1]
+
+    # Mask refinement using morphological operations
+    kernel = np.ones((3,3), np.uint8)
+    #mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    #mask = cv2.dilate(mask,kernel,iterations = 1)
+
+    result2 = cv2.inpaint(image, mask, 3, cv2.INPAINT_TELEA)
+
+    plt.imshow(mask)
+    plt.axis('off')
+    plt.show()
+
+    return result2
+
+
+
 
 def main():
     """
@@ -109,7 +197,7 @@ def main():
     """
 
     # Path to the test image (update if needed)
-    img_path = r"c:/Users/Alex Miao/Documents/dev/remote-lab/res2.png"
+    img_path = r"c:/Users/Alex Miao/Documents/dev/remote-lab/res3.png"
     if not os.path.exists(img_path):
         print(f"Test image not found: {img_path}")
         return
@@ -119,13 +207,22 @@ def main():
     if img_bgr is None:
         print("Failed to load image.")
         return
+    
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
     # Align and display
-    rotated = image_horitzontal_alignment(img_rgb)
-    cropped = crop_to_narrowest_y_range(rotated)
+    #rotated = image_horitzontal_alignment(img_rgb)
+    #cropped = crop_to_narrowest_y_range(rotated)
+    #binary = remove_resistor_body(cropped)
+
+    #binary = remove_resistor_body(img_rgb)
+
+    # Apply histogram equalization
+    _, image_rgb = image_histogram_equalization(img_rgb)
+
+    remove_glare_image_bgr = remove_glare(img_bgr)
     
-    plt.imshow(cropped)
+    plt.imshow(cv2.cvtColor(remove_glare_image_bgr, cv2.COLOR_BGR2RGB))
     plt.axis('off')
     plt.show()
     print("Image has been aligned and displayed.")
