@@ -40,3 +40,5 @@ def extract_instance(item_mask, im):
 
     # Display the image
     cv2_imshow(np.array(composite))
+
+    return composite

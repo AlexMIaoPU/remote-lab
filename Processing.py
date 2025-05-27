@@ -139,7 +139,7 @@ def lococate_colour_bands(binary_image):
 
 def image_histogram_equalization(image):
     """
-    Convert the image to  color space and apply histogram equalization to the  channel.
+    Convert the image to hsv color space and apply histogram equalization to the h channel.
     Then convert back to RGB color space.
     """
     hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
