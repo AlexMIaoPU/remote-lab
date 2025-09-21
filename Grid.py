@@ -301,7 +301,7 @@ def grid_generation(og_image):
     for i in range(col_count*3):
         pt = intersections[i]
         (x, y) = pt.get_coordinates()
-        print(f"PT Coordinates {x}, {y} on row {pt.row_idx}, col {pt.col_idx}")
+        # print(f"PT Coordinates {x}, {y} on row {pt.row_idx}, col {pt.col_idx}")
 
 
     # Draw intersection points
@@ -314,11 +314,7 @@ def grid_generation(og_image):
     new_size = (int(grid_img.shape[1] * scale), int(grid_img.shape[0] * scale))
     grid_img = cv2.resize(grid_img, new_size, interpolation=cv2.INTER_AREA)
 
-    cv2.imshow("Grid", grid_img)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
-    return intersections, grid_size, row_count, col_count
+    return grid_img, intersections, grid_size, row_count, col_count
 
 # Check for if a grid point is covered by a Bit Mask
 def get_masked_grid_points(grid_points, masks):
@@ -361,12 +357,8 @@ def classify_grid_points(colour_image, intersections, grid_size, height, width):
     model = models.resnet18(pretrained=False)
     num_ftrs = model.fc.in_features
     model.fc = nn.Linear(num_ftrs, num_classes)
-    # if GPU is available, load to GPU
-    if torch.cuda.is_available():
-        model.load_state_dict(torch.load("plug_classifier_resnet18.pth"))
-        model = model.cuda()
-    else:
-        model.load_state_dict(torch.load("plug_classifier_resnet18.pth", map_location="cpu"))
+
+    model.load_state_dict(torch.load("plug_classifier_resnet18.pth", map_location="cpu"))
     model.eval()
 
     # Run inference on each point in interesections and store results as GridPoint objects
@@ -413,7 +405,6 @@ def visualise_classified_grid_points(image, GridPoints, scale=0.3):
     new_size = (int(img_copy.shape[1] * scale), int(img_copy.shape[0] * scale))
     display_img = cv2.resize(img_copy, new_size,
                             interpolation=cv2.INTER_AREA)
-    cv2.imshow("Grid Inference", display_img)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    
+    return display_img
 
