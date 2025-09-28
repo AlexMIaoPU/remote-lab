@@ -27,7 +27,10 @@ class Point:
     
     def get_index(self):
         return (self.row_idx, self.col_idx)
-    
+
+
+# The GP type correesponds to the index in class_names
+# 0: not_plugged, 1: pass_over, 2: plugged
 class_names = ['not_plugged', 'pass_over', 'plugged']
 
 class GridPoint:
@@ -45,6 +48,8 @@ class GridPoint:
     def get_index(self):
         return self.point.get_index()
     
+    def is_plugged(self):
+        return self.type == 2  # Assuming 'plugged' is class index 2
 
 # === 1. Extract Keypoint Coordinates ===
 def get_keypoint_coords(keypoints):
