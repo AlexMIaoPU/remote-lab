@@ -1,3 +1,4 @@
+from WireConnectivity import check_wire_connectivity
 import cv2
 import numpy as np
 from sklearn.linear_model import RANSACRegressor
@@ -34,19 +35,25 @@ class Point:
 class_names = ['not_plugged', 'pass_over', 'plugged']
 
 class GridPoint:
-    def __init__(self, point, type, probs):
+    def __init__(self, point, type, probs, borders):
         self.point = point  # Point object
         self.type = type
         self.probs = probs  # Probability distribution over classes
+        self.borders = borders  # (borders_r_indexed, borders_c_indexed) Tuple indicating which borders the wire passes through
+        self.is_masked = False
 
     def __repr__(self):
-        return f"GridPoint of type {self.type} at {self.point}"
+        return f"GP of type {self.type} at {self.point} with probs {self.probs} and borders {self.borders}, masked: {self.is_masked}"
     
     def get_coordinates(self):
         return self.point.get_coordinates()
     
     def get_index(self):
         return self.point.get_index()
+
+    def set_is_masked(self, masked, mask_id):
+        self.is_masked = masked
+        self.mask_id = mask_id
     
     def is_plugged(self):
         return self.type == 2  # Assuming 'plugged' is class index 2
@@ -228,7 +235,7 @@ def find_additional_grid_points(intersections, row_count, col_count, grid_size):
         for j in range(2):
             row_coordinate = ref_point.y + grid_size * (j + 1)
             col_coordinate = ref_point.x 
-            new_point = Point(col_coordinate, row_coordinate, j + 7, i)
+            new_point = Point(col_coordinate, row_coordinate, j + 10, i)
             new_points.append(new_point)
 
     # Bottom 
@@ -237,7 +244,7 @@ def find_additional_grid_points(intersections, row_count, col_count, grid_size):
         for j in range(3):
             row_coordinate = ref_point.y + grid_size * (j + 1)
             col_coordinate = ref_point.x 
-            new_point = Point(col_coordinate, row_coordinate, j + 12, i)
+            new_point = Point(col_coordinate, row_coordinate, j + 17, i)
             new_points.append(new_point)
 
     # Increment row indices for old points
@@ -329,6 +336,7 @@ def get_masked_grid_points(grid_points, masks):
             (x, y) = gp.get_coordinates()
             if item_mask[int(round(y)), int(round(x))] > 0:
                 masked_points.append(gp)
+                gp.set_is_masked(True)
 
     return masked_points
 
@@ -387,7 +395,13 @@ def classify_grid_points(colour_image, intersections, grid_size, height, width):
         snapshot_rgb = cv2.cvtColor(snapshot, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(snapshot_rgb)
         pred, probs = classify_snapshot(model, pil_img)
-        grid_point = GridPoint(pt, pred, probs)
+
+        # if grid point is classified as pass_over or plugged, check for wire connectivity
+        borders = ([], [])
+        if pred in [1, 2]:  # pass_over or plugged
+            borders = check_wire_connectivity(snapshot, snapshot.shape[0], snapshot.shape[1])
+
+        grid_point = GridPoint(pt, pred, probs, borders)
         GridPoints.append(grid_point)
 
     return GridPoints

@@ -36,17 +36,17 @@ def check_wire_connectivity(snapshot, height, width):
         'right': border_has_wire(right_strip, n=num_pixels)
     }
 
-    borders_r_indexed = []
-    if borders['left']:
-        borders_r_indexed.append(-1)
-    if borders['right']:
-        borders_r_indexed.append(1)
-
     borders_c_indexed = []
-    if borders['top']:
+    if borders['left']:
         borders_c_indexed.append(-1)
-    if borders['bottom']:
+    if borders['right']:
         borders_c_indexed.append(1)
+
+    borders_r_indexed = []
+    if borders['top']:
+        borders_r_indexed.append(-1)
+    if borders['bottom']:
+        borders_r_indexed.append(1)
 
     print('Wire passes through these borders:')
     for border, present in borders.items():
