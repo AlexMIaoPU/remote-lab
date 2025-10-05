@@ -400,7 +400,7 @@ def classify_grid_points(colour_image, intersections, grid_size, height, width):
         pred, probs = classify_snapshot(model, pil_img)
 
         # if classifed as plugged but probability is low, reclassify as not_plugged
-        if pred == 2 and probs[2] < 0.6:
+        if pred == 2 and probs[2] < 0.50:
             pred = 0
 
 
