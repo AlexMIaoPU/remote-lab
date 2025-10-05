@@ -297,6 +297,8 @@ def grid_generation(og_image):
     row_count = len(rows)
     col_count = len(cols)
 
+    print(f"Detected {row_count} rows and {col_count} columns.")
+
     # Calculate grid size using by taking the average of the x differences between the first row of intersections
     grid_size = get_grid_size(row_count, col_count, intersections)
     print(f"Grid size (average x difference): {grid_size}")
