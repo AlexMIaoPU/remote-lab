@@ -20,6 +20,7 @@ class GridDijkstraSolver:
     def __init__(self, gps):
         # Createa a Map with key as Grid Coordinate and Value being Grid Point Object
         self.grid_map = {}
+        self.gps = gps
         # Find the list of Grid Points that are plugged in
         self.plugged_gps = []
         for gp in gps:

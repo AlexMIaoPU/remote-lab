@@ -427,7 +427,7 @@ def visualise_classified_grid_points(image, GridPoints: list[GridPoint], scale=0
         (x, y) = gp.get_coordinates()
         if gp.is_masked:
             # Draw mask id
-            cv2.putText(img_copy, str(gp.mask_id), (int(round(x)), int(round(y))), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1) # Yellow
+            cv2.putText(img_copy, str(gp.mask_id), (int(round(x)), int(round(y))), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2) # Yellow
         elif gp.type == 0:  # not_plugged
             cv2.circle(img_copy, (int(round(x)), int(round(y))), 10, (0, 0, 255), -1) # Red
         elif gp.type == 1:  # pass_over
