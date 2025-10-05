@@ -12,6 +12,9 @@ class DijkstraResult:
         self.total_cost = path_info.total_cost
         self.masked_gp_id = masked_gp_id
 
+    def __repr__(self):
+        return f"DijkstraResult(plugged_gp={self.plugged_gp.get_index()}, masked_gp_id={self.masked_gp_id}, total_cost={self.total_cost}, path={self.path})"
+
 
 class GridDijkstraSolver:
     def __init__(self, gps):
@@ -81,10 +84,10 @@ class GridDijkstraSolver:
                     except KeyError:
                         pass
 
-    def run_dijkstra(self):
+    def run_dijkstra(self) -> list[DijkstraResult]:
         # For each plugged GP, find the nearest masked GP using Dijkstra
         # return a list of DijkstraResult objects
-        results = []
+        results: list[DijkstraResult] = []
         for gp in self.gps:
             if gp.is_plugged():
                 start = gp.get_index()

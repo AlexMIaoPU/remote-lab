@@ -9,9 +9,9 @@ def border_has_wire(strip, threshold=40, n=10):
     avg_smallest = np.mean(sorted_strip[:n])
     avg_largest = np.mean(sorted_strip[-n:])
     diff = abs(avg_largest - avg_smallest)
-    print(f"Avg of {n} smallest: {avg_smallest}")
-    print(f"Avg of {n} largest: {avg_largest}")
-    print(f"Difference: {diff}")
+    # print(f"Avg of {n} smallest: {avg_smallest}")
+    # print(f"Avg of {n} largest: {avg_largest}")
+    # print(f"Difference: {diff}")
     return diff > threshold
 
 
@@ -48,11 +48,12 @@ def check_wire_connectivity(snapshot, height, width):
     if borders['bottom']:
         borders_r_indexed.append(1)
 
-    print('Wire passes through these borders:')
-    for border, present in borders.items():
-        if present:
-            print(f'- {border}')
-    if not any(borders.values()):
-        print('No border detected with wire passing through.')
+    
+    # print('Wire passes through these borders:')
+    # for border, present in borders.items():
+    #     if present:
+    #         print(f'- {border}')
+    # if not any(borders.values()):
+    #     print('No border detected with wire passing through.')
 
     return (borders_r_indexed, borders_c_indexed)

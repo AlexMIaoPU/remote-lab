@@ -331,20 +331,21 @@ def grid_generation(og_image):
     return grid_img, intersections, grid_size, row_count, col_count
 
 # Check for if a grid point is covered by a Bit Mask
-def get_masked_grid_points(grid_points, masks):
+def get_masked_grid_points(grid_points: list[GridPoint], masks):
     masked_points = []
     for indx, item_mask in enumerate(masks):
         for gp in grid_points:
             (x, y) = gp.get_coordinates()
             if item_mask[int(round(y)), int(round(x))] > 0:
+                gp.set_is_masked(True, indx)
                 masked_points.append(gp)
-                gp.set_is_masked(True)
+                
 
     return masked_points
 
 
 
-num_classes = 3  # plugged, not_plugged, pass_over
+num_classes = 3  # 0: not_plugged, 1: pass_over, 2: plugged
 input_size = 224
 
 # Use the same transform as in training
@@ -373,7 +374,7 @@ def classify_grid_points(colour_image, intersections, grid_size, height, width):
     num_ftrs = model.fc.in_features
     model.fc = nn.Linear(num_ftrs, num_classes)
 
-    model.load_state_dict(torch.load("plug_classifier_resnet18.pth", map_location="cpu"))
+    model.load_state_dict(torch.load("plug_classifier_resnet18_2.pth", map_location="cpu"))
     model.eval()
 
     # Run inference on each point in interesections and store results as GridPoint objects
@@ -398,10 +399,19 @@ def classify_grid_points(colour_image, intersections, grid_size, height, width):
         pil_img = Image.fromarray(snapshot_rgb)
         pred, probs = classify_snapshot(model, pil_img)
 
+        # if classifed as plugged but probability is low, reclassify as not_plugged
+        if pred == 2 and probs[2] < 0.6:
+            pred = 0
+
+
         # if grid point is classified as pass_over or plugged, check for wire connectivity
         borders = ([], [])
         if pred in [1, 2]:  # pass_over or plugged
             borders = check_wire_connectivity(snapshot, snapshot.shape[0], snapshot.shape[1])
+
+        # if borders is empty, reclassify as not_plugged
+        if len(borders[0]) == 0 and len(borders[1]) == 0:
+            pred = 0
 
         grid_point = GridPoint(pt, pred, probs, borders)
         GridPoints.append(grid_point)
@@ -409,18 +419,21 @@ def classify_grid_points(colour_image, intersections, grid_size, height, width):
     return GridPoints
 
 
-def visualise_classified_grid_points(image, GridPoints, scale=0.3):
+def visualise_classified_grid_points(image, GridPoints: list[GridPoint], scale=0.3):
     img_copy = image.copy()
 
     # Visualise results on the image, high light all plugged points
     for gp in GridPoints:
         (x, y) = gp.get_coordinates()
-        if gp.type == 0:  # not_plugged
-            cv2.circle(img_copy, (int(round(x)), int(round(y))), 10, (0, 0, 255), -1)
+        if gp.is_masked:
+            # Draw mask id
+            cv2.putText(img_copy, str(gp.mask_id), (int(round(x)), int(round(y))), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1) # Yellow
+        elif gp.type == 0:  # not_plugged
+            cv2.circle(img_copy, (int(round(x)), int(round(y))), 10, (0, 0, 255), -1) # Red
         elif gp.type == 1:  # pass_over
-            cv2.circle(img_copy, (int(round(x)), int(round(y))), 10, (0, 255, 0), -1)
+            cv2.circle(img_copy, (int(round(x)), int(round(y))), 10, (0, 255, 0), -1) # Green
         else:  # plugged
-            cv2.circle(img_copy, (int(round(x)), int(round(y))), 10, (255, 0, 255), -1)
+            cv2.circle(img_copy, (int(round(x)), int(round(y))), 10, (255, 0, 255), -1) # Magenta
 
     # Make image smaller for display
     new_size = (int(img_copy.shape[1] * scale), int(img_copy.shape[0] * scale))
