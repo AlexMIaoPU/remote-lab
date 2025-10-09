@@ -1,11 +1,75 @@
+from dataclasses import dataclass
+from typing import List
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import os
+from Grid import GridPoint
 
 '''
-This module contains functions for processing images, including resistor horizontal alignment,
+This module contains functions for processing resistor images, including resistor horizontal alignment,
 '''
+
+@dataclass
+class ResistorResult:
+    resistance: int
+    id: int
+    plugged_gps: List[GridPoint]
+
+
+# Map class indices to color codes
+color_map = {
+    0: 'black',
+    1: 'brown',
+    2: 'red',
+    3: 'orange',
+    4: 'yellow',
+    5: 'green',
+    6: 'blue',
+    7: 'violet',
+    8: 'grey',
+    9: 'white',
+    10: 'gold',
+    11: 'silver'
+}
+
+# reverse the map to get color to digits
+digit_map = {v: k for k, v in color_map.items()}
+
+def extract_resistance_from_predictor_output(predictions) -> int:
+    """
+    This function takes the output from the colour band extractor Detectron2 CV model and calculates the resistance.
+    https://detectron2.readthedocs.io/en/latest/tutorials/models.html#model-output-format
+
+    :param predictions: The output from the Detectron2 model.
+    :return: The calculated resistance as an integer.
+    """
+
+    instances = predictions["instances"].to("cpu")
+
+    # Get the predicted classes and boxes, and sort by x-coordinate
+    classes = instances.pred_classes.numpy()
+    boxes = instances.pred_boxes.tensor.numpy()
+    sorted_indices = np.argsort(boxes[:, 0])  # Sort by x1 (leftmost x-coordinate)
+    sorted_classes = classes[sorted_indices]
+
+    sorted_colors = [color_map[c] for c in sorted_classes]
+    print("Detected colors in order:", sorted_colors)
+
+    # Calculate resistance based on color bands
+    if len(sorted_colors) < 3:
+        raise ValueError("At least 3 color bands are required to calculate resistance.")
+
+    # if gold or silver is present, it should be the last band, thus we need to flip the order if necessary
+    if sorted_colors[0] in ['gold', 'silver']:
+        sorted_colors = sorted_colors[::-1]
+        sorted_classes = sorted_classes[::-1]
+
+    first_digit = sorted_classes[0]
+    second_digit = sorted_classes[1]
+    multiplier = 10 ** sorted_classes[2]
+    
+    return (first_digit * 10 + second_digit) * multiplier
 
 
 def image_horitzontal_alignment(image):
@@ -63,7 +127,10 @@ def image_horitzontal_alignment(image):
 
     return rotated
 
-def crop_to_narrowest_y_range(image):
+
+
+
+def __crop_to_narrowest_y_range(image):
     """
     Finds the column where the vertical span (y_max - y_min) of non-background pixels is minimized,
     and crops the image to that y-range across the entire width.
@@ -101,7 +168,7 @@ def crop_to_narrowest_y_range(image):
     cropped = image[best_y_min:best_y_max+1, :, :]
     return cropped
 
-def remove_resistor_body(image):
+def __remove_resistor_body(image):
     """
     This function removes the resistor body colour by sampling the 4 corners of the image and 
     takes the average of the 4 as the resistor body colour. It then subtracts the whole image
@@ -131,7 +198,7 @@ def remove_resistor_body(image):
 
 
 
-def lococate_colour_bands(binary_image):
+def __lococate_colour_bands(binary_image):
     '''
     Extract the colour bands location from the binary image.
     

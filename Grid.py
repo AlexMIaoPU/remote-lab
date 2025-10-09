@@ -41,6 +41,7 @@ class GridPoint:
         self.probs = probs  # Probability distribution over classes
         self.borders = borders  # (borders_r_indexed, borders_c_indexed) Tuple indicating which borders the wire passes through
         self.is_masked = False
+        self.node_id = None
 
     def __repr__(self):
         return f"GP of type {self.type} at {self.point} with probs {self.probs} and borders {self.borders}, masked: {self.is_masked}"
