@@ -57,8 +57,8 @@ def extract_resistance_from_predictor_output(predictions) -> int:
     print("Detected colors in order:", sorted_colors)
 
     # Calculate resistance based on color bands
-    if len(sorted_colors) < 3:
-        raise ValueError("At least 3 color bands are required to calculate resistance.")
+    if len(sorted_colors) < 4:
+        raise ValueError("At least 4 color bands are required to calculate resistance.")
 
     # if gold or silver is present, it should be the last band, thus we need to flip the order if necessary
     if sorted_colors[0] in ['gold', 'silver']:
