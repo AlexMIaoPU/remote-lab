@@ -298,6 +298,11 @@ def grid_generation(og_image):
     row_count = len(rows)
     col_count = len(cols)
 
+    # THERE NEEDS TO BE EXACTLY 14 ROWS
+    if row_count != 14:
+        print(f"Error: Detected {row_count} rows, but 14 are required.")
+        raise ValueError("Incorrect number of rows detected. 14 rows are required.")
+
     print(f"Detected {row_count} rows and {col_count} columns.")
 
     # Calculate grid size using by taking the average of the x differences between the first row of intersections
@@ -329,7 +334,8 @@ def grid_generation(og_image):
     new_size = (int(grid_img.shape[1] * scale), int(grid_img.shape[0] * scale))
     grid_img = cv2.resize(grid_img, new_size, interpolation=cv2.INTER_AREA)
 
-    return grid_img, intersections, grid_size, row_count, col_count
+    # We should have now added 8 more rows
+    return grid_img, intersections, grid_size, row_count + 8, col_count
 
 # Check for if a grid point is covered by a Bit Mask
 def get_masked_grid_points(grid_points: list[GridPoint], masks):
@@ -413,6 +419,14 @@ def classify_grid_points(colour_image, intersections, grid_size, height, width):
         # if borders is empty, reclassify as not_plugged
         if len(borders[0]) == 0 and len(borders[1]) == 0:
             pred = 0
+        else:
+            # instead, if we have borders, but classified as not_plugged, if not_plugged confidence is low, 
+            # reclassify as pass_over or plugged, whichever has higher probability
+            if pred == 0 and probs[0] < 0.75:
+                if probs[1] > probs[2]:
+                    pred = 1
+                else:
+                    pred = 2
 
         grid_point = GridPoint(pt, pred, probs, borders)
         GridPoints.append(grid_point)
