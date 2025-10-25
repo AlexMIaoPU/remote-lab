@@ -401,32 +401,32 @@ def classify_grid_points(colour_image, intersections, grid_size, height, width):
             continue
 
         snapshot = colour_image[y-half_grid_size:y+half_grid_size, x-half_grid_size:x+half_grid_size]
-        # Convert NumPy array (OpenCV BGR) to PIL Image (RGB)
-        snapshot_rgb = cv2.cvtColor(snapshot, cv2.COLOR_BGR2RGB)
-        pil_img = Image.fromarray(snapshot_rgb)
-        pred, probs = classify_snapshot(model, pil_img)
-
-        # if classifed as plugged but probability is low, reclassify as not_plugged
-        if pred == 2 and probs[2] < 0.50:
-            pred = 0
 
 
-        # if grid point is classified as pass_over or plugged, check for wire connectivity
+        # check for wire connectivity
         borders = ([], [])
         
         borders = check_wire_connectivity(snapshot, snapshot.shape[0], snapshot.shape[1])
 
-        # if borders is empty, reclassify as not_plugged
+        # if borders is empty, classify as not_plugged
         if len(borders[0]) == 0 and len(borders[1]) == 0:
             pred = 0
+            probs = np.array([1.0, 0.0, 0.0])
         else:
-            # instead, if we have borders, but classified as not_plugged, if not_plugged confidence is low, 
+            # If border has content, run classification model
+            # Convert NumPy array (OpenCV BGR) to PIL Image (RGB)
+            snapshot_rgb = cv2.cvtColor(snapshot, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(snapshot_rgb)
+            pred, probs = classify_snapshot(model, pil_img)
+
+            # if we have borders, but classified as not_plugged, if not_plugged confidence is low, 
             # reclassify as pass_over or plugged, whichever has higher probability
             if pred == 0 and probs[0] < 0.9:
                 if probs[1] > probs[2]:
                     pred = 1
                 else:
                     pred = 2
+
             # If classified as pass_over but probability is low, 
             # reclassify as plugged if only one border is detected (indicating a direct connection)
             if pred == 1 and probs[1] < 0.9:
