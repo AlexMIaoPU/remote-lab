@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from Grid import grid_generation, get_masked_grid_points, classify_grid_points, visualise_classified_grid_points
 # Use python library for Dijkstra
 from dijkstar import Graph, find_path
+from Grid import GridPoint
 
 class DijkstraResult:
     def __init__(self, plugged_gp, path_info, masked_gp_id):
@@ -114,3 +115,34 @@ class GridDijkstraSolver:
                     print(f"No path found from Plugged GP at {start} to any Masked GP.")
 
         return results
+
+
+    """
+    Find all pairs of masked Grid Points that are directly connected by wires
+    Given a list of Grid Points, return a list of tuples of connected plugged Grid Points
+    Tuple found by running Dijkstra to check connctivity and choosing the one with lowest cost
+    """
+    def find_wire_connected_gps(self, gps: list[GridPoint]) -> list[(GridPoint, GridPoint)]:
+        connected_gps = []
+        while len(gps) > 1:
+            gp1 = gps.pop(0)
+            start = gp1.get_index()
+            shortest_path = None
+            shortest_path_length = float('inf')
+            connected_gp2 = None
+            for gp2 in gps:
+                end = gp2.get_index()
+                try:
+                    path_info = find_path(self.graph, start, end)
+                    path_length = path_info.total_cost
+                    if path_length < shortest_path_length:
+                        shortest_path_length = path_length
+                        shortest_path = path_info
+                        connected_gp2 = gp2
+                except Exception as e:
+                    # No path found
+                    pass
+            if shortest_path is not None and connected_gp2 is not None:
+                connected_gps.append((gp1, connected_gp2))
+                gps.remove(connected_gp2)
+        return connected_gps

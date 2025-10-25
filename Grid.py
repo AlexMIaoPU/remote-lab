@@ -413,8 +413,8 @@ def classify_grid_points(colour_image, intersections, grid_size, height, width):
 
         # if grid point is classified as pass_over or plugged, check for wire connectivity
         borders = ([], [])
-        if pred in [1, 2]:  # pass_over or plugged
-            borders = check_wire_connectivity(snapshot, snapshot.shape[0], snapshot.shape[1])
+        
+        borders = check_wire_connectivity(snapshot, snapshot.shape[0], snapshot.shape[1])
 
         # if borders is empty, reclassify as not_plugged
         if len(borders[0]) == 0 and len(borders[1]) == 0:
@@ -422,10 +422,15 @@ def classify_grid_points(colour_image, intersections, grid_size, height, width):
         else:
             # instead, if we have borders, but classified as not_plugged, if not_plugged confidence is low, 
             # reclassify as pass_over or plugged, whichever has higher probability
-            if pred == 0 and probs[0] < 0.75:
+            if pred == 0 and probs[0] < 0.9:
                 if probs[1] > probs[2]:
                     pred = 1
                 else:
+                    pred = 2
+            # If classified as pass_over but probability is low, 
+            # reclassify as plugged if only one border is detected (indicating a direct connection)
+            if pred == 1 and probs[1] < 0.9:
+                if len(borders[0]) + len(borders[1]) == 1:
                     pred = 2
 
         grid_point = GridPoint(pt, pred, probs, borders)
