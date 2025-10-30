@@ -1,6 +1,6 @@
 from PIL import Image
+import cv2
 import numpy as np
-from google.colab.patches import cv2_imshow
 
 
 def extract_instance(item_mask, im):
@@ -38,7 +38,5 @@ def extract_instance(item_mask, im):
     # Compose the foreground and background using the alpha mask
     composite = Image.composite(new_fg_image, background, new_alpha_mask)
 
-    # Display the image
-    cv2_imshow(np.array(composite))
 
     return composite
