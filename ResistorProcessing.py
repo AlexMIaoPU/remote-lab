@@ -16,6 +16,13 @@ class ResistorResult:
     id: int
     plugged_gps: List[GridPoint]
 
+@dataclass
+class ResistorProcessingResult:
+    resistance: int
+    image: np.ndarray  # RGB image
+    id: int
+
+
 
 # Map class indices to color codes
 color_map = {
@@ -248,9 +255,9 @@ def remove_glare(image):
 
     result2 = cv2.inpaint(image, mask, 3, cv2.INPAINT_TELEA)
 
-    plt.imshow(mask)
-    plt.axis('off')
-    plt.show()
+    # plt.imshow(mask)
+    # plt.axis('off')
+    # plt.show()
 
     return result2
 
