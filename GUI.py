@@ -4,7 +4,9 @@ import asyncio
 import os
 import cv2
 import numpy as np
-from MainImageProcessingLogic import run_segmentation_on_image
+from MainImageProcessingLogic import run_segmentation_on_image, run_dijkstra_on_grid, generate_netlist
+# store row_count returned by segmentation
+row_count_storage = None
 
 # Global holders accessible from other modules
 uploaded_image_bytes = None         # raw bytes
@@ -15,6 +17,9 @@ on_image_uploaded_callbacks = []
 
 # store last segmentation results globally so other modules / handlers can access/edit
 res_results_storage = []  # list of ResistorProcessingResult items returned by run_segmentation_on_image
+
+# prevent re-entrant Dijkstra runs
+dijkstra_running = False
 
 def update_resistance(idx, new_value):
     """Update the stored resistance value for result at index idx; accepts numeric or string."""
@@ -135,49 +140,51 @@ async def handle_upload(e):
 
 
 # async handler for the segmentation button (accept optional event arg so it runs in the UI slot)
+async def perform_segmentation(image):
+    """
+    Run the heavy segmentation step and return results.
+    This function does NOT modify any module-level globals — it returns the results instead.
+    Returned: (seg_out_img, class_grid_im, res_results, row_count)
+    """
+    import asyncio as _asyncio
+    # call segmentation (may be sync or async)
+    if _asyncio.iscoroutinefunction(run_segmentation_on_image):
+        seg_out_img, class_grid_im, res_results, row_count = await run_segmentation_on_image(image)
+    else:
+        seg_out_img, class_grid_im, res_results, row_count = await _asyncio.to_thread(run_segmentation_on_image, image)
+    return seg_out_img, class_grid_im, res_results, row_count
+
 async def _run_segmentation_handler(e=None):
     import asyncio as _asyncio
-    global uploaded_image_cv2, res_results_storage
+    # NOTE: this function no longer mutates module globals; it returns results to caller
     if uploaded_image_cv2 is None:
         ui.notify('No image available for segmentation')
-        return
+        return None, None, None, None
 
     ui.notify('Segmentation starting...')
-    # update button text and disable interactions
     process_button.text = 'Processing...'
     process_button.disabled = True
     upload_comp.disabled = True
-    processing_label.visible = True
 
     try:
-        # yield to event loop so frontend receives the text update before heavy work
         await asyncio.sleep(0.05)
 
-        # call segmentation (run in thread if function is sync)
-        if _asyncio.iscoroutinefunction(run_segmentation_on_image):
-            seg_out_img, class_grid_im, res_results = await run_segmentation_on_image(uploaded_image_cv2)
-        else:
-            seg_out_img, class_grid_im, res_results = await _asyncio.to_thread(run_segmentation_on_image, uploaded_image_cv2)
+        # run segmentation via the pure function that RETURNS results
+        seg_out_img, class_grid_im, res_results, row_count = await perform_segmentation(uploaded_image_cv2)
 
         ui.notify('Segmentation finished')
 
-        # store results globally (replace previous)
-        res_results_storage = list(res_results) if res_results is not None else []
-
-        # clear previous output and redraw larger images and editable resistor entries
+        # build UI for outputs but DO NOT assign module globals here
         try:
             output_panel.clear()
         except Exception:
             output_panel.items = []
 
-        # Two-column layout: left -> main outputs (seg_out_img, class_grid_im),
-        # right -> list of resistor cards (image + editable resistance)
         with output_panel:
             with ui.row().classes('items-start gap-8'):
                 left_col = ui.column().style('flex: 0 0 520px; gap: 16px;')
-                right_col = ui.column().style('flex: 1 1 auto; gap: 12px;')
+                right_col = ui.column().style('flex: 1 1 auto; gap: 16px;')
 
-                # Left column: show main images stacked and larger
                 with left_col:
                     if seg_out_img is not None:
                         ui.label('Segmentation Output:')
@@ -190,42 +197,135 @@ async def _run_segmentation_handler(e=None):
                             'width: 700px; height: auto; border: 1px solid #ddd; padding: 4px;'
                         )
 
-                # Right column: one card per resistor with larger thumbnail and editable resistance
-                for i, res in enumerate(res_results_storage):
+                with right_col:
+                    ui.label('Individual component instances:')
+
+                for i, res in enumerate(res_results or []):
                     with right_col:
                         with ui.card().style('padding: 12px; margin-bottom: 10px; display:flex; gap:12px; align-items:flex-start;'):
-                            # thumbnail
                             img_url = _np_rgb_to_data_url(res.image) if getattr(res, 'image', None) is not None else ''
                             if img_url:
-                                ui.image(img_url).style('width: 400px; height: auto; border: 1px solid #ccc;')
+                                ui.image(img_url).style('width: 350px; height: auto; border: 1px solid #ccc;')
                             else:
-                                ui.label('No image').style('width: 280px;')
+                                ui.label('No image').style('width: 350px;')
 
-                            # metadata + editable resistance
                             with ui.column():
                                 ui.label(f'Resistor id: {getattr(res, "id", i)}')
                                 curr_label = ui.label(f'Current resistance: {getattr(res, "resistance", "")}')
-                                # on_change uses default arg to capture index correctly
                                 inp = ui.input(
                                     value=str(getattr(res, 'resistance', '')),
                                     label='Edit resistance',
                                     on_change=lambda e, idx=i, lbl=curr_label: (
                                         update_resistance(idx, e.value),
                                         lbl.set_text(
-                                            f'Current resistance: {((res_results_storage[idx]["resistance"] if isinstance(res_results_storage[idx], dict) else getattr(res_results_storage[idx], "resistance", e.value)))}'
+                                            f'Current resistance: {((res_results[idx]["resistance"] if isinstance(res_results[idx], dict) else getattr(res_results[idx], "resistance", e.value)))}'
                                         )
                                     )
                                 )
 
+        # return results to caller for external global assignment
+        return seg_out_img, class_grid_im, res_results, row_count
+
     except Exception as exc:
         ui.notify(f'Error during segmentation: {exc}')
+        return None, None, None, None
+
     finally:
-        # re-enable interactions
         process_button.text = 'Run Segmentation'
-        processing_label.visible = False
         process_button.disabled = False
         upload_comp.disabled = False
 
+async def _run_dijkstra_handler(e=None):
+    global res_results_storage, row_count_storage, dijkstra_running
+
+    # guard against re-entry
+    if dijkstra_running:
+        ui.notify('Dijkstra already running')
+        return
+    dijkstra_running = True
+
+    # immediately disable the button to avoid duplicate click handling
+    dijkstra_button.disabled = True
+    dijkstra_button.text = 'Running...'
+
+    # debug: show current state at handler start
+    print(f"[DEBUG] _run_dijkstra_handler start -> res_results_storage type={type(res_results_storage)} length={len(res_results_storage) if res_results_storage is not None else 'None'} row_count={row_count_storage}")
+    await asyncio.sleep(0.05)  # give UI a tiny moment
+
+    try:
+        # run the dijkstra function in a thread to avoid blocking the UI
+        rest_results = await run_dijkstra_on_grid(res_results_storage, row_count_storage)
+        
+        ui.notify('Dijkstra finished')
+
+        # run the Netlist file generation        
+        netlist_file_str = generate_netlist(rest_results)
+
+        ui.notify('Netlist generation finished')
+
+        # show dijkstra results box and populate list
+        dijkstra_box.visible = True
+        try:
+            dijkstra_output_panel.clear()
+        except Exception:
+            dijkstra_output_panel.items = []
+
+        for i, rr in enumerate(rest_results):
+            # rr may be an ResistorResult object
+            plugged_nodes = ', '.join(str(gp.node_id) for gp in rr.plugged_gps) if getattr(rr, 'plugged_gps', None) else 'N/A'
+            txt = f'Result {i}: resistor_id={rr.id}, plugged_nodes={plugged_nodes}'
+            # add label into the column using context manager
+            with dijkstra_output_panel:
+                ui.label(txt)
+
+        # populate netlist code panel
+        with netlist_file_panel:
+            ui.code(netlist_file_str).classes('w-full')
+
+    except Exception as exc:
+        ui.notify(f'Error: {exc}')
+    finally:
+        dijkstra_button.text = 'Run Dijkstra on Grid'
+        dijkstra_button.disabled = False
+        dijkstra_running = False
+
+
+# wire the button to the async handler so it executes in the UI slot (do NOT create a detached task)
+async def run_seg_and_store(e=None):
+    """Call the segmentation handler, store returned results in module globals for other handlers, and enable Dijkstra UI."""
+    ui.colors(primary='#555')
+    global res_results_storage, row_count_storage
+    seg_out_img, class_grid_im, res_results, row_count = await _run_segmentation_handler(e)
+    # if segmentation failed or returned no results, do not overwrite globals
+    if res_results is None:
+        print("[DEBUG] run_seg_and_store: segmentation returned None")
+        return
+
+    # update global storage in-place to avoid rebinding issues across modules
+    res_results_storage.clear()
+    try:
+        res_results_list = list(res_results)
+    except Exception:
+        res_results_list = [res_results]
+    if res_results_list:
+        res_results_storage.extend(res_results_list)
+    row_count_storage = row_count
+
+    # debug/log
+    print(f"[DEBUG] run_seg_and_store: stored {len(res_results_storage)} results, row_count={row_count_storage}; first_item_type={type(res_results_storage[0]) if res_results_storage else 'N/A'}")
+    ui.notify(f"Stored {len(res_results_storage)} resistor(s)")
+
+    ui.colors(primary='#5898d4')
+
+    # only enable Dijkstra button if we have at least one resistor result
+    if len(res_results_storage) > 0:
+        # ensure UI has a moment to process the storage update before enabling the button
+        await asyncio.sleep(0.02)
+        dijkstra_button.visible = True
+        dijkstra_button.disabled = False
+    else:
+        dijkstra_button.visible = False
+        dijkstra_button.disabled = True
 
 #############$$$$$$$$$$$$$$$$$$
 ##
@@ -233,32 +333,52 @@ async def _run_segmentation_handler(e=None):
 ##
 #############$$$$$$$$$$$$$$$$$$
 
-ui.label('Hello There!!')
+ui.label('UNSW Remote Lab System').style('color: #6E93D6; font-size: 300%; font-weight: 500')
 
 # top-row: left = controls (upload, button, processing), right = preview image
 with ui.row().classes('items-start gap-8').style('align-items: flex-start;'):
-    left_col = ui.column().style('flex: 0 0 360px; gap: 12px;')
+    left_col = ui.column().style('flex: 0 0 520px; gap: 12px;')
     right_col = ui.column().style('flex: 1 1 auto; gap: 12px;')
 
     with left_col:
-        ui.label('Controls').style('font-weight: bold;')
+        ui.label('Controls').style('font-weight: bold; font-size: 200%; font-weight: 500')
         # upload component placed on the left column
         upload_comp = ui.upload(on_upload=handle_upload).props('accept="image/*"').classes('max-w-full')
         # processing indicator and control button (hidden until upload)
-        processing_label = ui.label('Processing...').style('font-weight: bold; color: red;')
-        processing_label.visible = False
         process_button = ui.button('Run Segmentation', on_click=None)
         process_button.visible = False
+        # Dijkstra button placed below controls (initially hidden)
+        dijkstra_button = ui.button('Run Dijkstra & Generate Netlist', on_click=None)
+        dijkstra_button.visible = False
+        dijkstra_button.disabled = True
 
     with right_col:
-        ui.label('Preview').style('font-weight: bold;')
+        ui.label('Image Preview').style('font-weight: bold; font-size: 200%; font-weight: 500')
         preview = ui.image('').style('width: 500px; max-height: 70vh; border: 1px solid #ddd; padding: 6px;')
         preview.visible = False
+# separate area for dijkstra output
+dijkstra_box = ui.card().style('margin-top: 12px; padding:12px;')
+dijkstra_box.visible = False
+with dijkstra_box:
+    with ui.row().classes('items-start gap-8'):
+        left_col = ui.column().style('flex: 0 0 520px; gap: 16px;')
+        right_col = ui.column().style('flex: 1 1 auto; gap: 16px;')
+
+        with left_col:
+            ui.label('Dijkstra Results:').style('font-weight: bold;')
+            # this column will be cleared / populated when results are ready
+            dijkstra_output_panel = ui.column().classes('gap-2')
+
+        with right_col:
+            ui.label('Generated Netlist:').style('font-weight: bold;')
+            netlist_file_panel = ui.column().classes('gap-2')
 
 # output container for results
 output_panel = ui.column().classes('gap-4')
 
-# wire the button to the async handler so it executes in the UI slot (do NOT create a detached task)
-process_button.on('click', _run_segmentation_handler)
+process_button.on('click', run_seg_and_store)
+
+# wire dijkstra button
+dijkstra_button.on('click', _run_dijkstra_handler)
 
 ui.run()
