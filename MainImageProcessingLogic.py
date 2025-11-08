@@ -252,7 +252,7 @@ async def run_dijkstra_on_grid(resistors: list[ResistorProcessingResult], row_co
         else:
             print(f"Not enough Dijkstra results for masked_gp Resistor {i}")
 
-    # Collect all unique plugged grid points
+    # Collect all unique plugged grid points that are part of resistor connections
     unique_plugged_gps = {}
     for res in rest_results:
         for gp in res.plugged_gps:
@@ -261,10 +261,15 @@ async def run_dijkstra_on_grid(resistors: list[ResistorProcessingResult], row_co
 
     # Find all the plugged GPs that not belong to any resistor connections
     non_res_plugged_gps = [gp for gp in all_plugged_gps if gp not in unique_plugged_gps_list]
+    print("Non-resistor plugged GPs:")
+    for gp in non_res_plugged_gps:
+        print(gp.get_index())
 
     # Find all wire connected plugged GP pairs
     wire_connected_gp_pairs = dijkstra_solver.find_wire_connected_gps(non_res_plugged_gps)
-    print(wire_connected_gp_pairs)
+    print("Wire connected GP pairs:")
+    for gp1, gp2 in wire_connected_gp_pairs:
+        print(f"GP {gp1.get_index()} <-> GP {gp2.get_index()}")
 
     # If the GPs are in row 5-9 and in same col, they can be treated as the same point,
     # likewise if the GPs are in row 12-16 and in same col, they can be treated as the same point.
@@ -301,7 +306,7 @@ async def run_dijkstra_on_grid(resistors: list[ResistorProcessingResult], row_co
     top_rail_gnd_node = set()
     bottom_rail_v_node = set()
     bottom_rail_gnd_node = set()
-    for gp in unique_plugged_gps_list:
+    for gp in all_plugged_gps:
         if gp.get_index()[0] == 0:  # top power rail row index
             top_rail_v_node.add(gp)
         elif gp.get_index()[0] == 1:  # top gnd rail row index
@@ -322,19 +327,41 @@ async def run_dijkstra_on_grid(resistors: list[ResistorProcessingResult], row_co
     for gp in bottom_rail_v_node:
         gp.node_id = bottom_power_supply_node_ids[1]
 
+    print("Top rail V nodes:", [gp.get_index() for gp in top_rail_v_node])
+    print("Top rail GND nodes:", [gp.get_index() for gp in top_rail_gnd_node])
+    print("Bottom rail GND nodes:", [gp.get_index() for gp in bottom_rail_gnd_node])
+    print("Bottom rail V nodes:", [gp.get_index() for gp in bottom_rail_v_node])
+
+    # Debug print all asigned node ids
+    print("PreAssigned node ids to plugged GPs:")
+    for gp in all_plugged_gps:
+        print(f"GP {gp.get_index()} assigned node id: {gp.node_id}")
+
 
     # For all pairs of GPs present in wire_connected_gp_pairs, assign them the same node id
     for gp1, gp2 in wire_connected_gp_pairs:
+        original_id_pair = [gp1.node_id, gp2.node_id]
         # Check both have node ids
         if gp1.node_id is None or gp2.node_id is None:
             continue
         # assign the smaller node id to both
-        min_node_id = min(gp1.node_id, gp2.node_id)
+        chosen_node_id = min(gp1.node_id, gp2.node_id)
+
+        # if whichever node id is in top/bottom power supply node ids, use that
+        if gp1.node_id in top_power_supply_node_ids + bottom_power_supply_node_ids:
+            chosen_node_id = gp1.node_id
+        if gp2.node_id in top_power_supply_node_ids + bottom_power_supply_node_ids:
+            chosen_node_id = gp2.node_id
 
         # also convert other GPs with same node id to min_node_id
         for gp in all_plugged_gps:
-            if gp.node_id == gp1.node_id or gp.node_id == gp2.node_id:
-                gp.node_id = min_node_id
+            if gp.node_id in original_id_pair:
+                gp.node_id = chosen_node_id
+
+    # Debug print all asigned node ids
+    print("Assigned node ids to plugged GPs:")
+    for gp in all_plugged_gps:
+        print(f"GP {gp.get_index()} assigned node id: {gp.node_id}")
 
     return rest_results
 

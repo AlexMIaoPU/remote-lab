@@ -421,7 +421,7 @@ def classify_grid_points(colour_image, intersections, grid_size, height, width):
 
             # if we have borders, but classified as not_plugged, if not_plugged confidence is low, 
             # reclassify as pass_over or plugged, whichever has higher probability
-            if pred == 0 and probs[0] < 0.9:
+            if pred == 0 and probs[0] < 0.925:
                 if probs[1] > probs[2]:
                     pred = 1
                 else:
@@ -432,6 +432,12 @@ def classify_grid_points(colour_image, intersections, grid_size, height, width):
             if pred == 1 and probs[1] < 0.9:
                 if len(borders[0]) + len(borders[1]) == 1:
                     pred = 2
+
+            # Similarly, if classified as plugged but probability is low,
+            # reclassify as pass_over if multiple borders are detected
+            if pred == 2 and probs[2] < 0.8:
+                if len(borders[0]) + len(borders[1]) > 1:
+                    pred = 1
 
         grid_point = GridPoint(pt, pred, probs, borders)
         GridPoints.append(grid_point)
